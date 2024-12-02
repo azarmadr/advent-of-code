@@ -1,0 +1,5 @@
+if not ('2024/1/input.txt' | path exists) {
+  http get 'https://adventofcode.com/2024/day/1/input' -H [Cookie '_ga=GA1.2.1845906478.1733047174; _gid=GA1.2.848699463.1733047174; _ga_MHSNPJKWC7=GS1.2.1733047175.1.1.1733047183.0.0.0; session=53616c7465645f5fadf4459f90e9e53da214fc32ed17ee5184dcd365dde2c70e4a34bcd8b4a9615fe06babfb0287dcff9c612ed4427ea463d7f94dbc4fea4f95']
+  | save -f 2024/1/input.txt
+}
+let aoc = open 2024/1/input.txt

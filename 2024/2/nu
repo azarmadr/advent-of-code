@@ -1,0 +1,28 @@
+def safety-report [] {
+  let report = $in
+  $report
+  | zip ($report | drop nth 0)
+  | each {$in.0 - $in.1}
+  | (
+    ($in | all {$in < 4 and $in > -4 and $in != 0}) and
+    (($in | all {$in > 0}) or ($in | all {$in < 0}))
+  )
+}
+def safe-report-after-dampening [] {
+  let i = $in
+  $i | enumerate | any {|j| $i | drop nth $j.index | safe-report}
+}
+let report = open 2024/2/input.txt | lines | each {
+  split row ' ' | each {into int}
+}
+
+let groups = $report | group-by {
+  if ($in | safe-report) {
+    'safe'
+  } else if ($in| safe-report-after-dampening) {
+    'dampend'
+  } else {'unsafe'}
+}
+
+echo [ $'Safe reports: ($groups.safe|length)'
+$'Safe reports after dampening: ($groups | get safe dampend |each {length}|math sum)' ]
