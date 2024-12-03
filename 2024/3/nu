@@ -1,0 +1,26 @@
+let input = open 2024\3\input.txt | lines
+
+let silver = $input
+| parse -r '.*?mul\((\d+),(\d+)\).*?'
+| update cells {into int}
+| each {values | math product}
+| math sum
+
+let gold = $input
+| parse -r `.*?(mul\((\d+),(\d+)\)|(do|don't)\(\)).*?`
+| reduce -f {state: true, do: [], dont: []} {|it,acc|
+  $acc | update state {match $it.capture3 {
+    do => true
+    `don't` => false
+    _ => $acc.state
+  }}
+  | update (if $in.state {'do'} else {'dont'}) {$in | append $it}
+}
+| get 'do'
+| select capture1 capture2
+| filter {$in.capture1 != ''}
+| update cells {into int}
+| each {values | math product}
+| math sum
+
+echo [$silver, $gold]
