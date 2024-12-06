@@ -5,55 +5,37 @@ def sum-middle-entries [] {
   | math sum
 }
 
-def pos-contains [pos] {
-  }
-
 def correct-input [pos] {
-  sort-by -c {|a, b| $b in ($pos | get $a -i | default [])}
+  sort-by -c {|a, b| {pre:$a, post:$b} in $pos}
 }
 
 # get the middle number of correct reports and sum them
 def "main silver" [input: path, ] {
-  let data = open $input | parse-input
-  $data.valid | get item| sum-middle-entries
+  open $input | parse-input | where valid | get item | sum-middle-entries
 }
 
 def "main gold" [input: path, ] {
-  let data = open $input | parse-input
-  $data.invalid | get item | inspect | each {correct-input $data.pos} | sum-middle-entries
+  open $input | parse-input | where valid == false | get item | sum-middle-entries
 }
 
 # solution for day 2024/5
 def main [rest] {
   print 'Silver'
-  main silver $rest
+  main silver $rest | print
+  print 'Gold'
   main gold $rest
 }
 
 
 def parse-input [] {
   let data = $in
-  let pos = $data
-    | lines
-    | parse '{pre}|{post}'
-    | reduce -f {} {|el, acc| $acc | upsert $el.pre {append $el.post} }
-  {}
-  | insert pos $pos
-  | merge (
-      $data
-      | lines
-      | filter {$in =~ ','}
-      | each {split row ','}
-      | each {|i|
-        {res: ($i
-        | drop
-        | enumerate
-        | all {|j|
-          $i | skip ($j.index + 1) | all {$in in ($pos | get $j.item -i | default [])}
-        }
-        | if $in {'valid'} else {'invalid'}
-        ), item: $i}
-      }
-      | group-by res
-    )
+  let pos = $data | lines | parse '{pre}|{post}'
+  $data
+  | lines
+  | filter {$in =~ ','}
+  | each {split row ','}
+  | each {
+    let corrected = $in | correct-input $pos
+    {item: $corrected, valid: ($in == $corrected)}
+  }
 }
