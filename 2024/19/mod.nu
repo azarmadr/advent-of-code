@@ -1,62 +1,67 @@
 $env.config.table.mode = 'compact'
 $env.config.table.header_on_separator = true
 
-def remove-towels-from-designs [design] {
-  each {|i| $design | each {if ($in | str starts-with $i) or ($in == '') {str replace -r $'^("(" + $i))+' ''}}}
-  | flatten
-  | uniq -c
-}
-
 # get the middle number of correct reports and sum them
 def "main silver" [input: path, ] {
   let onsen = open $input | parse-input
   let towels = $onsen.towels
 
-  $onsen.design | par-each {|design|
-    mut acc = [$design]
+  mut count = 0
+  mut acc = []
+  for design in $onsen.design {
+    $acc = [$design] | uniq -c 
     loop {
-      $acc = $towels | remove-towels-from-designs $acc | get value
-      if ($acc | is-empty) {return false}
-      if ($acc | any {$in == ''}) {return true}
+      $acc = $acc | remove-towels-from-designs $towels
+      if ($acc | is-empty) {break}
+      if ($acc | get value | any {$in in $towels}) { $count += 1; break}
     }
 
-    if false { # very slow for input
-    mut acc = ['']
-    loop {
-      $acc = $acc
-        | each {|i| $towels | each {$i + $in}}
-        | flatten
-        | filter {|i| $design | str starts-with $i}
-        # inspect
-        if ($acc | is-empty) {return false} else if ($acc | any {$in == $design}) {return true}
-    }
+    # very slow for input
+    if false {
+      mut acc = ['']
+      loop {
+        $acc = $acc
+          | each {|i| $towels | each {$i + $in}}
+          | flatten
+          | filter {|i| $design | str starts-with $i}
+          if ($acc | is-empty) {return false} else if ($acc | any {$in == $design}) {return true}
+      }
     }
   }
-  | filter {$in}
-  | length
+  $count
 }
 
-def "main gold" [input: path, ] {
+def "main gold" [input: path, --count(-c): int] {
   let onsen = open $input | parse-input
   let towels = $onsen.towels
 
-  $onsen.design | par-each {|design|
-    mut acc = [$design]
-    loop {
-      $acc = $towels | remove-towels-from-designs $acc | get value
-      if ($acc | is-empty) {return false}
-      if ($acc | any {$in == ''}) {return true}
-    }
+  mut acc = $onsen.design | if $count == null {take $count} else {$in} | uniq -c
+  mut count = 0
+  loop {
+    $acc = $acc | remove-towels-from-designs $towels | inspect
+    if ($acc | is-empty) {return $count}
+    for it in ($acc | where value == ''| get count) {$count += $it}
+    $acc = $acc | where value != ''
   }
-  | filter {$in}
-  | length
+}
+
+def remove-towels-from-designs [towels] {
+  par-each {|design| $towels
+    | filter {|i| $design.value | str starts-with $i}
+    | each {|towel| $design | update value {str replace $towel ''}}
+  }
+  | flatten
+  | if $in != [] {
+    group-by value --to-table
+    | rename value count
+    | update count { get count | math sum}
+  } else {[]}
 }
 
 # solution for day 2024/5
 def main [rest] {
+  main silver $rest | print $'Silver:>($in)'
   main gold $rest | print $'Gold:> ($in)'
-  return
-  main silver $rest | print 'Silver:>' $in
 }
 
 def parse-input [] {
