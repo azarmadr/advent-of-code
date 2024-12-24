@@ -31,28 +31,23 @@ def monkey-up [] {
   # do { $in | print; $in}
 }
 
-def merge-price-groups [new] {
-  [$in $new]
-  | flatten
-  | reduce -f {} {|i a| $a | upsert $i.changes {($in | default 0) + $i.price}}
-  | transpose changes price
-}
-
 def "main gold" [input: path, ] {
   open $input | parse-input
   | enumerate
   | par-each {|i|
     print $i.index
-    let i = $i.item
-    seq 0 1999
-    | reduce -f [$i] {|_, acc| $acc | append ($acc | last | next-secret)}
-    | each {$in - $in // 10 * 10}
-    | monkey-up
+    mut i = $i.item
+    mut secrets = []
+    for _ in 0..2000 {
+      $secrets = $secrets ++ ($i - $i // 10 * 10 )
+      $i = $i | next-secret
+    }
+    $secrets | monkey-up
   }
-  | reduce -f [] {|i a|
-    $i | merge-price-groups $a
-  }
-  | get price
+  | flatten
+  | group-by changes
+  | values
+  | each {get price | math sum}
   | math max
   | print $'Gold:>($in)'
 }
