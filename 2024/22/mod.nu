@@ -11,20 +11,50 @@ def "main silver" [input: path, ] {
 
 def monkey-up [] {
   let prices = $in
-  let a = 0..2
-  | reduce -f [$prices] {|i, a| $a | append [($a | last | skip)]}
-  $a.0 | zip $a.1 | zip $a.2 | zip $a.3 | each {flatten | flatten}
+  1..4
+  | reduce -f ($prices| wrap 0) {|i, a| $a | drop | merge (
+    $a
+    | get $'($i - 1)'
+    | skip
+    | wrap $'($i)'
+  )}
+  | each {values}
+  | each {{
+    changes: (
+      $in | zip ($in | skip) | each {$in.1 - $in.0}
+      | str join
+    )
+    price: ($in | last)
+  }}
+  | where price > 0
+  | uniq-by changes
+  # do { $in | print; $in}
+}
+
+def merge-price-groups [new] {
+  [$in $new]
+  | flatten
+  | reduce -f {} {|i a| $a | upsert $i.changes {($in | default 0) + $i.price}}
+  | transpose changes price
 }
 
 def "main gold" [input: path, ] {
   open $input | parse-input
-  | each {|i|
-    seq 0 19
+  | enumerate
+  | par-each {|i|
+    print $i.index
+    let i = $i.item
+    seq 0 1999
     | reduce -f [$i] {|_, acc| $acc | append ($acc | last | next-secret)}
     | each {$in - $in // 10 * 10}
     | monkey-up
   }
-  | $in.0 | table -e
+  | reduce -f [] {|i a|
+    $i | merge-price-groups $a
+  }
+  | get price
+  | math max
+  | print $'Gold:>($in)'
 }
 
 # solution for day 2024/5
