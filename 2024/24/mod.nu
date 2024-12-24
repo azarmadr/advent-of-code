@@ -11,9 +11,13 @@ def get-value [-b, reg] {
   | if $b {$in} else {into int -r 2}
 }
 
-# get the middle number of correct reports and sum them
-def "main silver" [input: path, ] {
-  let system = open $input | parse-input
+def 'run-system load' [xy] {
+  let system = $in
+  $xy | each {bits-to-string}
+}
+
+def run-system [] {
+  let system = $in
   mut gates = $system.1
   mut reg = $system.0
   loop {
@@ -31,17 +35,49 @@ def "main silver" [input: path, ] {
     }
     if ($gates | is-empty) { break }
   }
-  $reg | get-value z
+  [$reg $gates]
+}
+
+# get the middle number of correct reports and sum them
+def "main silver" [input: path, ] {
+  open $input | parse-input | run-system | get 0 | get-value z
+}
+
+def "into num-string" [] {
+  '00' + ($in | into string) | str replace -r '.*(..)$' '$1'
+}
+
+def bits-to-string [] {
+  into bits | split row ' ' | reverse | str join | str reverse | str substring 0..45 | str reverse
+}
+
+def debug-system [
+  -i: string
+  -e: list<string>
+  -d: int # depth
+] {
+  let d = $d | default 3
+  if $d < 0 {return}
+  let system = $in
+  $system.1 | where out =~ $i | if $in != [] {inspect}
+  | get in
+  | flatten
+  | filter {($e | is-empty) or ($in not-in $e)}
+  | each {|i| $system | try {debug-system -d ($d - 1) -i $i -e $e}}
 }
 
 def "main gold" [input: path, ] {
   let system = open $input | parse-input
-  let x = $system.0 | get-value x -b | print
-  let y = $system.0 | get-value y -b | print
-  # let z = [$x $y] | print
-  let z_ = main silver $input | print
-  $system.1 | sort | inspect
-  '' | print $'Gold:> ($in)'
+  let x = $system.0 | get-value x
+  let y = $system.0 | get-value y
+  let z = $system | run-system | $in.0 | get-value z
+  let err = $z bit-xor $x + $y
+  if $z == $x + $y {return 'pass'}
+  let err_s = $err | bits-to-string
+  $err_s | print
+  let err_b = $err_s | str reverse | str index-of 1 | into num-string
+  $system | debug-system -i $err_b -d 2
+  ''
 }
 
 # solution for day 2024/5
