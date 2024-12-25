@@ -40,7 +40,7 @@ const KEY_CHANGES = [[from to instruction];
   [v v A] [v A >^A] [v < <A] [v > >A]
 ]
 
-def gen-robot-inst [from to] {
+def gen-robot-inst [-d from to] {
   insert $to {|r|
     $r
     | get $from
@@ -67,8 +67,11 @@ def "main silver" [input: path, ] {
   | gen-robot-inst code robot_inst1
   | gen-robot-inst robot_inst1 robot_inst2
   | gen-robot-inst robot_inst2 robot_inst3
-  | insert length {$in.robot_inst3 | each {str length} | uniq}
-  | insert score {($in.code.0 | str substring 0..-2 | into int) * ($in.length|math min)}
+  | gen-robot-inst robot_inst3 final
+  | insert length {$in.final | each {str length}|uniq -c}
+  | insert score {(
+    $in.code.0 | str substring 0..-2 | into int) * (
+    $in.length| get count |math min)}
   | move length score --after code
   | do {$in | table -e | print; $in}
   | get score | math sum
