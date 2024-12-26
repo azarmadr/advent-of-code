@@ -5,48 +5,54 @@ $env.config.table.header_on_separator = true
 def "main silver" [input: path, ] {
   open $input
   | parse-input
-  | enumerate
-  | do {|i|
-    mut sum = $i | get item
-    | each {$in.0} | math sum | $in
-    mut index = 0
-    while $sum > 0 {
-      $sum -= $i | get $index | $in.item | math sum
-      $index += 1
-    }
-    let index = $index
-    $i | each {if $in.index < $index {$in} else {update item {$in.0}}}
-  } $in
-  | inspect
-  | each {|i| $i.item
-    | enumerate
-    | update index {if $in == 0 {$i.index} else {'.'}}
-    | each {|i| seq 1 $i.item | each {$i.index}}
-    | flatten
-  }
-  | flatten
   | do {
     mut i = $in
-    mut index = 1
-    while . in $i { $i | length | print $'($index) - ($in)'
-      while ($i | get $index) != . {$index += 1}
-      $i = $i | drop | update $index ($i | last)
-      mut last = $i | last
-      while $last == . {
+    mut o = $i | take 1
+    $i = $i | skip
+    [{i:$i o:$o}] | table -e | print
+    while ($i | is-not-empty) {
+      if ($i | last | $in.id) == . {
         $i = $i | drop
-        $last = $i | last
+        continue
       }
+      if $i.0.id != . {
+        $o = $o ++ $i.0
+        $i = $i | skip
+        continue
+      }
+      let last = $i | last
+      let gap = $i | first
+      if $gap.len > $last.len {
+        $o = $o ++ $last
+        $i = $i | drop | update 0 {update len {$in - $last.len}}
+      } else if $gap.len < $last.len {
+        $o = $o
+        | append ($last | update len {$gap.len})
+        $i = $i | update ($i | length | $in - 1) {
+          update len {$in - $gap.len}
+        } | skip 1
+      } else {
+        $o = $o ++ $last
+        $i = $i | skip 1 | drop 1
+      }
+      # print $'($i | length) - ($o | length)'
+      # [{i:$i o:$o last: $last gap: $gap}] | table -e | print
     }
-    $i
+    $o
   }
+  | each {|i| seq 1 $i.len | each {$i.id}}
+  | flatten
   | enumerate
   | each {$in.index * $in.item}
   | math sum
-  | inspect
 }
 
 def "main gold" [input: path, ] {
   open $input | parse-input
+  | do {
+    mut i = $in
+    mut o = $i | take 1
+  }
 }
 
 # solution for day 2024/5
@@ -60,4 +66,12 @@ def parse-input [] {
   split chars
   | each {try {into int}}
   | chunks 2
+  | enumerate
+  | each {|i| $i.item
+    | enumerate
+    | update index {if $in == 0 {$i.index} else {'.'}}
+    | each {|i| {id: $i.index len: $i.item}}
+    | where len > 0
+  }
+  | flatten
 }
