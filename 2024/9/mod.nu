@@ -7,11 +7,17 @@ def "main silver" [input: path, ] {
   | parse-input
   | enumerate
   | do {|i|
-    return $i
     mut sum = $i | get item
-    | each {$in.0} | math sum | $in // 2 | inspect
-    $i
+    | each {$in.0} | math sum | $in
+    mut index = 0
+    while $sum > 0 {
+      $sum -= $i | get $index | $in.item | math sum
+      $index += 1
+    }
+    let index = $index
+    $i | each {if $in.index < $index {$in} else {update item {$in.0}}}
   } $in
+  | inspect
   | each {|i| $i.item
     | enumerate
     | update index {if $in == 0 {$i.index} else {'.'}}
@@ -21,14 +27,10 @@ def "main silver" [input: path, ] {
   | flatten
   | do {
     mut i = $in
-    mut index = 0
-    while . in $i {
-      let last = $i | last
-      # $i | str join | inspect | str length | print
-      $i | length | print
-      let index = $i | enumerate
-      | skip until {|i| $i.item == .} | $in.0.index
-      $i = $i | drop | update $index $last
+    mut index = 1
+    while . in $i { $i | length | print $'($index) - ($in)'
+      while ($i | get $index) != . {$index += 1}
+      $i = $i | drop | update $index ($i | last)
       mut last = $i | last
       while $last == . {
         $i = $i | drop
