@@ -22,7 +22,7 @@ export def blink [] {
 export def "blink for" [limit] {
   let i = $in
   0..$limit
-  | reduce -f $i {|_,a| $a | blink }
+  | reduce -f $i {blink}
 }
 
 export def u-blink [] {
@@ -34,7 +34,7 @@ export def u-blink [] {
 export def "u-blink for" [limit] {
   let i = $in
   0..$limit
-  | reduce -f $i {|_,a| $a | u-blink }
+  | reduce -f $i {u-blink}
 }
 
 export def blink-saturate [] {

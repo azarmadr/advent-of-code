@@ -4,7 +4,7 @@ $env.config.table.header_on_separator = true
 # get the middle number of correct reports and sum them
 def "main silver" [input: path, ] {
   open $input | parse-input
-  | par-each {|i| seq 0 1999 | reduce -f $i {|_, acc| $acc | next-secret }}
+  | par-each {|i| seq 0 1999 | reduce -f $i {next-secret}}
   | math sum
   | print $'Silver:>($in)'
 }
@@ -12,8 +12,8 @@ def "main silver" [input: path, ] {
 def monkey-up [] {
   let prices = $in
   1..4
-  | reduce -f ($prices| wrap 0) {|i, a| $a | drop | merge (
-    $a
+  | reduce -f ($prices| wrap 0) {|i| drop | merge (
+    $in
     | get $'($i - 1)'
     | skip
     | wrap $'($i)'
@@ -39,7 +39,7 @@ def "main gold" [input: path, ] {
     mut i = $i.item
     mut secrets = []
     for _ in 0..2000 {
-      $secrets = $secrets ++ ($i - $i // 10 * 10 )
+      $secrets = $secrets | append ($i - $i // 10 * 10 )
       $i = $i | next-secret
     }
     $secrets | monkey-up
@@ -55,7 +55,6 @@ def "main gold" [input: path, ] {
 # solution for day 2024/5
 def main [rest] {
   main gold $rest | print
-  return
   main silver $rest
 }
 

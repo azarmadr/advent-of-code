@@ -55,7 +55,7 @@ def merge-head [-v] {
     | each {filter {$in != $c}}
     | flatten
   }
-  | reduce {|i, acc| $acc | intersection $i}
+  | reduce {|i| intersection $i}
   | each {$in ++ $head | sort}
   | uniq
   if $v {
@@ -95,7 +95,7 @@ def next-level-lan-party [] {
       | each {filter {$in != $c}}
       | flatten
     }
-    | reduce {|i, acc| $acc | intersection $i}
+    | reduce {|i| intersection $i}
     | each {$in ++ $i.item}
   }
   | flatten

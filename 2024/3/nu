@@ -6,8 +6,8 @@ let input = open 2024\3\input.txt | lines
 }
 | insert gold { $input
   | parse -r `.*?(mul\((\d+),(\d+)\)|(do|don't)\(\)).*?`
-  | reduce -f {state: true, do: [], dont: []} {|it,acc|
-    $acc | update state {match $it.capture3 {
+  | reduce -f {state: true, do: [], dont: []} {|it|
+    update state {match $it.capture3 {
       do => true
         `don't` => false
           _ => $acc.state

@@ -5,7 +5,7 @@ $env.config.table.header_on_separator = true
 def "main silver" [input: path, ] {
   open $input | parse-input
   | get items
-  | reduce {|i a| $a | each {|j| $i | each {zip $j}}| flatten}
+  | reduce {|i| each {|j| $i | each {zip $j}}| flatten}
   | filter {all {math sum | $in < 8}}
   | length
   | inspect

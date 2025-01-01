@@ -25,11 +25,8 @@ def three-way-calibration [i] {
     $i.nums
     | skip 1
     | reverse
-    | reduce -f [$i.calibration] {|i, a|
-      $a
-      | each {[($in - $i) ($in / $i) ...(
-        $in | can-remove-concatenation $i
-      )]}
+    | reduce -f [$i.calibration] {|i|
+      each {[($in - $i) ($in / $i) ...($in | can-remove-concatenation $i)]}
       | flatten
       | filter {$in == ($in | into int) and $in > 0}
       | into int
@@ -59,8 +56,8 @@ def parse-input [] {
     $i.nums
     | skip 1
     | reverse
-    | reduce -f [$i.calibration] {|i, a|
-      $a | each {[($in - $i) ($in / $i)]}
+    | reduce -f [$i.calibration] {|i|
+      each {[($in - $i) ($in / $i)]}
       | flatten
       | filter {$in == ($in | into int) and $in > 0}
       | into int
