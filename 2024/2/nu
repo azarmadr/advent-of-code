@@ -1,7 +1,6 @@
 def safe-report [] {
-  let report = $in
-  $report
-  | zip ($report | skip 1)
+  $in
+  | zip ($in | skip)
   | each {$in.0 - $in.1}
   | (
     ($in | math abs | all {$in < 4 and $in > 0}) and
