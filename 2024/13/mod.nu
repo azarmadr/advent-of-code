@@ -6,8 +6,7 @@ def calculate-tokens [--less-than-100 (-l)] {
   | insert b {($in.ax * $in.py - $in.ay * $in.px) / $in.det}
   | filter {$in.a == ($in.a | into int) and $in.b == ($in.b | into int)}
   | filter {not $less_than_100 or $in.a <= 100 and $in.b <= 100}
-  | insert tokens {$in.a * 3 + $in.b}
-  | get tokens
+  | each {$in.a * 3 + $in.b}
   | math sum
 }
 
@@ -26,9 +25,14 @@ def "main gold" [input: path, ] {
 
 # solution for day 2024/5
 def main [rest] {
-  main gold $rest | print $'Gold:> ($in)'
-  return
-  main silver $rest | print $'Silver:> ($in)'
+  debug profile -l -m 3 {
+    main gold $rest | print $'Gold:> ($in)'
+    main silver $rest | print $'Silver:> ($in)'
+  }
+  | move duration_ms --after line
+  | sort-by duration_ms
+  | reject file
+  | print
 }
 
 def parse-input [] {
