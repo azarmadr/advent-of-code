@@ -1,0 +1,27 @@
+$env.config.table.mode = 'compact'
+$env.config.table.header_on_separator = true
+
+def "main silver" [] {
+  open $input | parse-input
+}
+
+def "main gold" [] {
+  open $input | parse-input
+}
+
+def main [-v] {
+  debug profile -l -m 3 {
+    main gold | print $'Gold:> ($in)'
+    main silver | print $'Silver:> ($in)'
+  }
+  | move duration_ms --after line
+  | reject file
+  | if $v {print}
+}
+
+def parse-input [] {
+  cd ($env.CURRENT_FILE | path dirname)
+  if not ('sample.txt' | path exists) {
+  http get $'https://adventofcode.com/(pwd | path relative-to ("..." | path expand))' -H {Cookie: (open .cookie)}
+  lines
+}
