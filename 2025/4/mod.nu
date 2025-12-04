@@ -19,36 +19,43 @@ def compute-adj-slower [] {
   | sort-by row col
 }
 
+def get-matrix-items-path [] {
+  zip [item item] | flatten | into cell-path
+}
+
 def compute-adj-count [] {
   let matrix = $in
-  mut count = 0
-  mut row = 0
-  for i in $matrix {
-    $row += 1
-    let row = $row
-    mut col = 0
-    for j in $i {
-      $col += 1
-      if $j == . {continue}
-      let col = $col
-      let adj_folds = $ADJ_GRID
-      | each { zip [$row $col] | each {math sum} }
+  $matrix
+  | par-each {|i|
+    if ($i.row mod 66) == 0 {$i.row | print}
+    $i.item
+    | where item != .
+    | par-each {|j| 
+      $ADJ_GRID
+      | each { zip [$i.row $j.col] | each {math sum} }
       | where $it not-has -1
-      | each { into cell-path }
+      | each { get-matrix-items-path }
       | each {|p| $matrix | get $p -o}
       | where $it == @
       | length
-      if $adj_folds < 4 { $count += 1 }
+      | if $in < 4 {
+	$j | merge ($i.row | wrap row)
+      }
     }
-    print $row
+    | compact
   }
-  $count
+  | flatten
+  | do {
+    let liftable = $in  
+    $liftable | length | wrap count
+    | insert matrix {
+      $liftable | each {[$in.row $in.col] | get-matrix-items-path}
+      | reduce -f $matrix {|p| update $p .}
+    }
+  }
 }
 
-def "main silver" [] {
-  each {[.] ++ $in} | [[]] ++ $in
-  | compute-adj-count
-}
+def "main silver" [] {$in.count}
 
 def "main silver-slower" [] {
   where adj < 4 | length
@@ -63,6 +70,18 @@ def "main silver-newer" [] {
 }
 
 def "main gold" [] {
+  mut table = $in
+  mut lifted = 0
+  loop {
+    $lifted += $table.count
+    $table | select count | print
+    $table = $table.matrix | compute-adj-count
+    if $table.count == 0 {break}
+  }
+  $lifted
+}
+
+def "main gold-slower" [] {
   mut table = $in
   mut lifted = 0
   loop {
@@ -117,7 +136,11 @@ def parse-input [input] {
   | parse-input-internal
 }
 
-def parse-input-internal [] {}
+def parse-input-internal [] {
+  each {[.] ++ $in} | [[]] ++ $in
+  | each {enumerate | rename col} | enumerate | rename row
+  | compute-adj-count
+}
 
 def parse-input-internal-slower [] {
   flatten-matrix
@@ -126,7 +149,7 @@ def parse-input-internal-slower [] {
 def run [input] {
   let input = parse-input $input
   {}
-  # insert gold {$input | main gold}
+  | insert gold {$input | main gold}
   | insert silver {$input | main silver}
 }
 def main [input = sample.txt, -v] {
@@ -136,4 +159,3 @@ def main [input = sample.txt, -v] {
   | reject file
   } else {run $input}
 }
-
