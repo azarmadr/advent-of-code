@@ -8,11 +8,6 @@ def "main silver" [] {
 def "main gold" [] {
 }
 
-def run [input] {
-  let input = parse-input $input
-  $input | main gold | print $"Gold:>\n($in)"
-  $input | main silver | print $"Silver:>\n($in)"
-}
 def main [input = sample.txt, -v] {
   # let input = 'input.txt'
   if $v {debug profile -l -m 3 { run $input}
@@ -28,4 +23,10 @@ def parse-input [input] {
     # save -f sample.txt
   }
   open $input
+}
+def run [input] {
+  let input = parse-input $input
+  {}
+  | insert gold {$input | main gold}
+  | insert silver {$input | main silver}
 }
