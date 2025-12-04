@@ -4,7 +4,7 @@ use .../nu/get-days-input.nu *
 
 const ADJ_GRID = [[-1 -1] [-1 0] [-1 1] [0 -1] [0 1] [1 -1] [1 0] [1 1]]
 
-def compute-adj [] {
+def compute-adj-slower [] {
   let table = $in | where roll == @
   $table
   | par-each {|r| $ADJ_GRID
@@ -19,8 +19,47 @@ def compute-adj [] {
   | sort-by row col
 }
 
+def compute-adj-count [] {
+  let matrix = $in
+  mut count = 0
+  mut row = 0
+  for i in $matrix {
+    $row += 1
+    let row = $row
+    mut col = 0
+    for j in $i {
+      $col += 1
+      if $j == . {continue}
+      let col = $col
+      let adj_folds = $ADJ_GRID
+      | each { zip [$row $col] | each {math sum} }
+      | where $it not-has -1
+      | each { into cell-path }
+      | each {|p| $matrix | get $p -o}
+      | where $it == @
+      | length
+      if $adj_folds < 4 { $count += 1 }
+    }
+    print $row
+  }
+  $count
+}
+
 def "main silver" [] {
+  each {[.] ++ $in} | [[]] ++ $in
+  | compute-adj-count
+}
+
+def "main silver-slower" [] {
   where adj < 4 | length
+}
+
+def "main silver-newer" [] {
+  enumerate | flatten
+  | window 4 -s 2
+  | enumerate
+  | update index {|i| $i.item.0.index}
+  | each {initial-steps2}
 }
 
 def "main gold" [] {
@@ -44,6 +83,18 @@ def flatten-matrix [] {
   | flatten
 }
 
+def initial-steps2 [] {
+  each {enumerate | transpose -i | skip | rename -b {str replace -r '\D+' c}} | flatten
+  | update item {|i|
+    each {reject index | values | enumerate | rename col roll}
+    | enumerate | flatten
+    | update index {$in + $i.index}
+    | rename row
+    | flatten
+    | compute-adj
+  }
+}
+
 def parse-input [input] {
   cd ($env.CURRENT_FILE | path dirname)
   if not ('input.txt' | path exists) { get-days-input }
@@ -61,18 +112,25 @@ def parse-input [input] {
     | lines | str trim | str join "\n"
     | save -f sample.txt
   }
-  open $input | lines | each {split chars}
+  open $input
+  | lines | each {split chars}
+  | parse-input-internal
+}
+
+def parse-input-internal [] {}
+
+def parse-input-internal-slower [] {
+  flatten-matrix
+  | compute-adj-slower
 }
 def run [input] {
   let input = parse-input $input
-  | flatten-matrix
-  | compute-adj
   {}
-  | insert gold {$input | main gold}
+  # insert gold {$input | main gold}
   | insert silver {$input | main silver}
 }
 def main [input = sample.txt, -v] {
-  # let input = 'input.txt'
+  let input = 'input.txt'
   if $v {debug profile -l -m 3 { run $input}
   | move duration_ms --after line
   | reject file
