@@ -15,19 +15,45 @@ def paths-to-out-from [$start out=out -w: string] {
       | if $w == null {} else {where $w not-in $it}
     }
     | flatten
-    | do {each {str join ' '} | print $in; $in}
+    # do {each {str join ' '} | print $in; $in}
     | {out: $i next: $in}
   } [[$start]]
   | last
 }
+
+def heads-to-out-from [$start out=out -w: list<string>] {
+  let graph = $in
+  generate {|i|
+    if ($i | all {$in.head == $out}) {return {}}
+    $i
+    | par-each {|i|
+      if $i.head == $out { return [$i] }
+      $graph | get $i.head
+      | each {|h|
+	$i | update head $h
+	| if $h in $w {update w {|i| append $h | sort}} else {}
+      }
+    }
+    | flatten
+    | group-by --to-table head w
+    | update w {|i| $i.items.0.w}
+    | update items {get items | math sum}
+    | sort-by w
+    | sort-by {$in.head == out}
+    | do {update w {str join ' '} | wrap name | grid | print; $in}
+    | {out: $i next: $in}
+  } [{head: $start items: 1 w: []}]
+  | last
+}
 def silver [] {
-  paths-to-out-from you
-  | length
+  paths-to-out-from you | length
 }
 
 def gold [] {
-  paths-to-out-from svr
-  | length
+  heads-to-out-from svr -w [dac fft]
+  | where $it.w == [dac fft]
+  | get items
+  | math sum
 }
 
 def parse-input [input] {
@@ -73,7 +99,7 @@ def parse-input [input] {
 def run [input] {
   let input = parse-input $input
   {}
-  # insert gold {$input | gold}
+  | insert gold {$input | gold}
   | insert silver {$input | silver}
 }
 
