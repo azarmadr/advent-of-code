@@ -1,6 +1,7 @@
 $env.config.table.mode = 'compact'
 $env.config.table.header_on_separator = true
 use .../nu/get-days-input.nu *
+use .../nu/utils.nu *
 
 def remove-consecutive-patterns [] {
   mut i = $in
@@ -13,30 +14,11 @@ def remove-consecutive-patterns [] {
   $i | str replace -ra '(.)\1+' '$1$1' # do {print $in; $in}
 }
 
-def combinations [items: list<any>, k: int] {
-    if $k == 0 {
-        return [[]]
-    }
-    if ($items | length) < 2 {
-        return []
-    }
-
-    mut rest = $items
-    mut $combinations = []
-    loop {
-      let $first = $rest | first
-      $rest = $rest | skip
-      if ($rest | is-empty) {return $combinations}
-      $combinations ++= append ($rest | each {[$first $in]})
-    }
-}
-
-
 def "main silver-slow" [] {
   each {
     remove-consecutive-patterns
     | split chars
-    | combinations $in 2
+    | combinations $in
     | each {str join '' | into int}
     | math max
     # do {print $in; $in}
@@ -77,8 +59,8 @@ def "main silver" [] {
 
 def run [input] {
   let input = parse-input $input
-  # $input | main gold | print $"Gold:>\n($in)"
   $input | main silver | print $"Silver:>\n($in)"
+  $input | main gold | print $"Gold:>\n($in)"
 }
 def main [input = sample.txt, -v] {
   let input = 'input.txt'

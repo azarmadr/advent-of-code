@@ -2,10 +2,10 @@ $env.config.table.mode = 'compact'
 $env.config.table.header_on_separator = true
 use .../nu/get-days-input.nu *
 
-def "main silver" [] {
+def silver [] {
 }
 
-def "main gold" [] {
+def gold [] {
 }
 
 def parse-input [input] {
@@ -21,12 +21,12 @@ def parse-input [input] {
 def run [input] {
   let input = parse-input $input
   {}
-  | insert gold {$input | main gold}
-  | insert silver {$input | main silver}
+  | insert gold {$input | gold}
+  | insert silver {$input | silver}
 }
 
-def main [input = sample.txt, -v] {
-  # let input = 'input.txt'
+def main [i=0, -v] {
+  let input = [input.txt sample.txt] | get $i
   if $v {debug profile -l -m 3 { run $input}
     | move duration_ms --after line
     | reject file
