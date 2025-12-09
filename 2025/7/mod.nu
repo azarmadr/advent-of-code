@@ -47,17 +47,21 @@ def "main silver" [] {
 }
 
 def merge-splits [row map] {
-  do {each {str join ' '} | print; $in}
-  $row | each {str join ' '} | print
-  let tails = $row | each {last}
+  let tails = $row | get tail | uniq
   $map
-  | par-each {|r| if $r.0 in $tails {
-    $row
-    | where ($it | last) == $r.0
-    | each {drop | append $r}
-  } else {[$r]}}
+  | upsert items {default 1}
+  | each {|r|
+    if $r.head in $tails {
+      $row
+      | where $it.tail == $r.head
+      | each {|i| $r | merge $i}
+      | reject tail
+    } else {[$r]}}
   | flatten
-  | do {each {str join ' '} | print; $in}
+  | group-by head --to-table
+  | update head {into int}
+  | update items {get items | math sum}
+  | do {table -e| print res $in; $in}
 }
 
 def "main gold" [] {
@@ -68,13 +72,13 @@ def "main gold" [] {
     | get index
     | each {|i|
       [($i - 1) ($i + 1)]
-      | each {[$in $i]}
+      | each {{head: $in tail: $i}}
     }
     | flatten
   }
   # do {table -e | print $in; $in}
   | reduce {|i| merge-splits $i $in}
-  | length
+  | get items | math sum
 }
 
 def parse-input [input] {
@@ -118,7 +122,7 @@ def run [input] {
   | insert silver {$input | main silver}
 }
 
-def main [i=1, -v] {
+def main [i=0, -v] {
   let input = [input.txt sample.txt]
   | get $i
   if $v {debug profile -l -m 3 { run $input}
