@@ -53,7 +53,7 @@ def silver [] {
 }
 
 def inspect-machine [i=def] {
-  update joltage {str join ' '}
+  update jolts {str join ' '}
   | update buttons {each {update out {str join ' '}}
     | upsert rem {str join ' '}
   }
@@ -65,11 +65,14 @@ def inspect-machine [i=def] {
 
 def inspect-res [name?] {
   if $name != null {print $name}
-  $in.best? | if $in != null {print $'best: ($in)'}
-  $in | reject -o best| items {|k v| $v
+  $'($in.best? | if $in != null {$"best: ($in) "})dur: ($in.dur) '
+  | print
+  $in | reject -o best dur | items {|k v| $v
     | first 111
     | each {values | $'($in)' | str replace -a , ''}
-    | $"($k)[($v | length)]\n($in| try {grid | lines | first 3 | str join "\n"})"
+    | $"($k)[($v | length)]\n($in| try {
+      grid | lines | first 3 | str join "\n"
+    })"
     | str trim
     | print
   }
@@ -77,28 +80,39 @@ def inspect-res [name?] {
   $in
 }
 
-def min-button-count-for-joltage [-o] {
+def pressable-for [jolts button] {
+  $jolts
+  | enumerate
+  | where item == 0
+  | get index
+  | all {$in not-in $button.item.out}
+}
+
+def min-button-count-for-jolts [-o] {
   let m = $in # machine
-  let ids = $m.buttons | get index
+  let buttons = $m.buttons | enumerate
   let counts = {counts: ($m.buttons | each {0})
-  jolts: $m.joltage}
-  0..81 | generate {|_ i|
+  jolts: $m.jolts}
+  let rems = $m.buttons.rem | flatten
+  let SIZE_LIMIT = 9 * ($rems | length)
+  0..999 | generate {|c i|
     if $i.wip? == null {return {out: $i}}
+    let now = date now
+    let SIZE_LIMIT = $SIZE_LIMIT
+    | if $i.best? == null {} else {$in * 99999}
     $i.wip
-    | par-each {|c| $ids | each {|id|
-      let b = $m.buttons | get $id
-      $c
-      | update ([counts $id] | into cell-path) {
+    | first $SIZE_LIMIT
+    | par-each {|c| $buttons
+    | where (pressable-for $c.jolts $it)
+    | each {|b| $c
+      | update ([counts $b.index] | into cell-path) {
 	let count = $in
-	if $b.rem == [] {
+	if $b.item.rem == [] {
 	  $count + 1
 	} else {
-	  let mult = $b.rem
-	  | each {|o| $c.jolts | get $o}
+	  let mult = $b.item.rem | each {|o| $c.jolts | get $o}
 	  | uniq | sort
-	  if ($mult | length) > 1 {
-	    $mult | last
-	  } else if $mult.0 in [0 $count] {
+	  if $mult.0 == 0 {
 	    $count + 1 # don't want to return the same
 	  } else {
 	    $mult.0
@@ -107,22 +121,34 @@ def min-button-count-for-joltage [-o] {
       }
       | update jolts {|i| get-jolts $i.counts $m}
     }}
-    | flatten
-    | uniq
-    | where not $o or $i.best? == null or ($it.counts | math sum) < $i.best
-    | sort-by jolts
+    | flatten | uniq
+    | where (not $o 
+      or $i.best? == null
+      or ($it.counts | math sum) < $i.best)
     | group-by {match $in.jolts {
       $x if ($x | all {$in == 0}) => 'res'
       $x if ($x | all {$in >= 0}) => 'wip'
       _ => 'failed'
     }}
+    | upsert wip {
+      append ($i.wip | skip $SIZE_LIMIT)
+      | sort-by {get jolts | where $it != 0 | length}
+      | group-by {$in.jolts | str join ,} --to-table
+      | get items | each { if ($in | length) == 1 {} else {
+	group-by {$in.counts | math sum} --to-table
+	| rename sum | update sum {into int} | sort-by sum
+	| $in.0.items
+      }} | flatten
+    }
+    | compact -e
     | insert best {
       if $in.res? == null {$i.best?} else {
 	$in.res.counts | each {math sum}
 	| where $i.best? == null or $it < $i.best
 	| if $in == [] {$i.best} else {math min}
     }}
-    | inspect-res
+    | insert dur {$'[($c)] ((date now) - $now)'}
+    | if $c mod 27 == 0 {inspect-res} else {}
     | {out: $i next:$in}
   } {wip:[$counts]}
   | last | get best
@@ -131,39 +157,57 @@ def min-button-count-for-joltage [-o] {
 def get-jolts [counts machine] {
   $counts
   | enumerate | flatten
-  | reduce -f $machine.joltage {|c j| $machine.buttons.out
+  | reduce -f $machine.jolts {|c j| $machine.buttons.out
     | get $c.index
     | reduce -f $j {|i| update $i {$in - $c.item}}
   }
 }
 
-def gold [] {
-  reject lights
-  | update joltage {split row , | into int}
-  | update buttons {
-    sort | wrap out
-    | enumerate | flatten
-    | do {
-      let buttons = $in
-      | reverse
-      $in
-      | insert rem {|b|
-	$b.out | each {|b|
-	  $buttons | where $it.out has $b
-	  | first
-	  | {out: $b id: $in.index}
-	}
-	| where id == $b.index
-	| get out
+def sort-buttons-and-insert-rem [] {
+  sort | wrap out
+  | enumerate | flatten
+  | do {
+    let buttons = $in | reverse
+    $in
+    | insert rem {|b|
+      $b.out | each {|b|
+	$buttons | where $it.out has $b
+	| first
+	| {out: $b id: $in.index}
       }
+      | where id == $b.index
+      | get out
     }
   }
-  | first 2
-  | each {
-    inspect-machine 'gold'
-    | min-button-count-for-joltage -o
-  }
-  | math sum
+}
+
+def rearrange-jolts-by-buttons-available [] {
+  let m = $in # machine
+  let n = $m.buttons # new arrangement
+  | flatten | uniq -c
+  | insert jolts {|i| $m.jolts | get $i.value}
+  | sort-by count jolts
+  | enumerate | flatten
+print $n
+  $m
+  | update jolts {$n.jolts}
+  | update buttons {each {
+    each {|i| $n | where value == $i | $in.0.index}
+    | sort
+  }}
+}
+
+def gold [] {
+  reject lights
+  | update jolts {split row , | into int}
+  | each {rearrange-jolts-by-buttons-available}
+  | update buttons {sort-buttons-and-insert-rem }
+  | enumerate
+  | first 9
+  | par-each {update item {inspect-machine 'gold'
+    | min-button-count-for-jolts -o
+  }}
+  # math sum
 }
 
 def parse-input [input] {
@@ -179,7 +223,7 @@ def parse-input [input] {
   open $input
   | lines
   | parse -r '\[(.*)\] (.*) \{(.*)\}'
-  | rename lights buttons joltage
+  | rename lights buttons jolts
   | update buttons {
     split row ' '
     | each {split row -r \D | compact -e | into int}
