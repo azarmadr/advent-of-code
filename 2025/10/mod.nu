@@ -2,17 +2,17 @@ $env.config.table.mode = 'compact'
 $env.config.table.header_on_separator = true
 use .../nu/get-days-input.nu *
 
+const PROCESS_FIRST_N = 22
+
 def combination-gen [] {
   let items = $in
   1..($items | length)
-  | generate {|e i|
-    $i
+  | generate {|e i| $i
     | each {|j| $items
       | where $it not-in $j
       | each {[...$j $in] | sort}
     }
-    | flatten
-    | uniq
+    | flatten | uniq
     | {out: $i, next: $in}
   } ($items | each {[$in]})
   | flatten
@@ -33,7 +33,8 @@ def min-button-count [key final filter: closure cl: closure] {
     | uniq
     | where (do $filter $it $start)
     | do {
-      each {into int|str join ' '}| print $'($in | first 27 | grid -w 29)r: ($in | length)'
+      each {into int|str join ' '}
+      | print $'($in | first 27 | grid -w 29)r: ($in | length)'
       $in
     }
     | {out: $i next:$in}
@@ -53,21 +54,18 @@ def silver [] {
 }
 
 def inspect-machine [i=def] {
-  update jolts {str join ' '}
+  update jolts {|i| try {str join ' '} catch {$i}}
   | update buttons {each {update out {str join ' '}}
     | upsert rem {str join ' '}
   }
-  | table -e
-  | print
+  | table -e | print
   $in
 }
 
-def inspect-res [name?] {
-  if $name != null {print $name}
-  $'($in.dur) ($in.best? | if $in != null {$" best: ($in)"})'
-  | print
+def inspect-res [] {
+  print $'($in.dur) ($in.best? | if $in != null {$" best: ($in)"})'
   $in | reject -o best dur now | items {|k v| $v
-    | first 111
+    | first 27
     | each {values | $'($in)' | str replace -a , ''}
     | $"($k)[($v | length)]\n($in| try {
       grid | lines | first 3 | str join "\n"
@@ -77,38 +75,6 @@ def inspect-res [name?] {
   }
   print ''
   $in
-}
-
-def inspect-button-counts [] {
-  update counts {str join ' '}
-  | update jolts {str join ' '}
-  | wrap name | grid
-  | print
-  $in
-}
-
-def pressable-for [jolts button] {
-  $jolts
-  | enumerate
-  | where item == 0
-  | get index
-  | all {$in not-in $button.out}
-}
-
-def skip-if-rem-cant-change [rem] {
-  if $rem == [] {return $in}
-  let i = $in
-  if ($rem | each {|i| $i.jolts | get $i} | all {$in == 0}) {$i}
-}
-def prune-duplicates [] {
-  group-by {$in.jolts | str join ,} --to-table
-  | get items
-  | each { if ($in | length) == 1 {} else {
-    group-by {$in.counts | math sum} --to-table
-    | rename sum | update sum {into int} | sort-by sum
-    | $in.0.items
-  }}
-  | flatten
 }
 
 def min-button-count-for-jolts [-o] {
@@ -153,13 +119,7 @@ def min-button-count-for-jolts [-o] {
       $x if ($x | all {$in >= 0}) => 'wip'
       _ => 'failed'
     }}
-    | upsert wip {
-      append ($i.wip | skip $SIZE_LIMIT)
-      # if ($in | is-empty) {} else {roll up}
-      #      | sort-by {$in.next-button-to-try * -1} {
-      # get jolts | where $it != 0 | length}
-      # prune-duplicates
-    }
+    | upsert wip {append ($i.wip | skip $SIZE_LIMIT)}
     | compact -e
     | insert best {
       if $in.res? == null {$i.best?} else {
@@ -174,7 +134,7 @@ def min-button-count-for-jolts [-o] {
 	| each {$p.now - $in | $in // 1sec * 1sec} | str join " | ")'}
       | do {$in.wip?.next-button-to-try | default [] | uniq -c
 	| rename index $'c($m.index)' | sort-by index
-	| transpose -rd | [$in]
+	| transpose -rd | insert index $m.index | [$in]
 	| print; $in}
       | inspect-res
     } else {}
@@ -193,18 +153,12 @@ def get-jolts [counts machine] {
 }
 
 def sort-buttons-and-insert-rem [] {
-  sort | wrap out
-  | enumerate | flatten
+  sort | wrap out | enumerate | flatten
   | do {
     let buttons = $in | reverse
-    $in
-    | insert rem {|b|
-      $b.out | each {|b|
-	$buttons | where $it.out has $b
-	| first
-	| {out: $b id: $in.index}
-      }
-      | where id == $b.index
+    $in | insert rem {|b| $b.out
+      | each {|b| $buttons | where $it.out has $b | first | update out $b}
+      | where index == $b.index
       | get out
     }
   }
@@ -228,18 +182,17 @@ def rearrange-jolts-by-buttons-available [] {
 def gold [] {
   let cache = try {open res.nuon} | default []
   $in | reject lights
-  | update jolts {split row , | into int}
-  | each {rearrange-jolts-by-buttons-available}
-  | update buttons {sort-buttons-and-insert-rem }
   | enumerate | flatten
   | where index not-in $cache.index
-  | first 27
-  | par-each -t 3 {inspect-machine $'gold'
-    | min-button-count-for-jolts -o
-  }
+  # | first $PROCESS_FIRST_N
+  | update jolts {split row , | into int}
+  | each {rearrange-jolts-by-buttons-available}
+  | update buttons {sort-buttons-and-insert-rem}
+  | tee {each {inspect-machine}}
+  | par-each -t 3 {min-button-count-for-jolts -o}
   | compact
-  | tee {if $in != [] {append $cache | save -f res.nuon}}
-  # math sum
+  | if $in != [] {append $cache | sort | tee {save -f $file}}
+  | math sum
 }
 
 def parse-input [input] {
