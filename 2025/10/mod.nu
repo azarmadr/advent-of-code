@@ -138,7 +138,7 @@ def min-button-count-for-jolts [-o] {
 	| print; $in}
       | inspect-res
     } else {}
-    | {out: $i next:$in}
+    | if $in.wip? == null {{out: $in}} else {next:$in}
   } {wip:[$counts]}
   | last | {index: $m.index res: $in.best?}
 }
@@ -164,30 +164,90 @@ def sort-buttons-and-insert-rem [] {
   }
 }
 
+def substract-rows [mid] {
+  let m = $in | enumerate | flatten
+  let len = $m | length
+  print -n $mid
+  generate {|m|
+    0..($len - 1) | reduce -f $m {|id a|
+      update $id {$a | where index != $id
+	| reduce -f ($a | get $id) {|r a|
+	  let reduced = [$a $r] | transpose | skip
+	  | each {values | [$in.0 ($in.1 - $in.2)]}
+	  if ($reduced | any {$in.1 < 0}) {$a} else {
+	    print -n $'> ($id) - ($r.index)'
+	    $reduced | reduce -f {index: $id} {|i|
+	      insert $i.0 $i.1}
+	  }
+	}
+      }
+    }
+    | if $m == $in {{out: $in}} else {next: $in}
+  } $m
+  | last
+  | tee {print '>' ;
+    $in | rename index $'jolt($mid)'
+    | update cells {if $in == 0 {''} else {}}
+    | print}
+}
+
+def rref [m] {
+  [$m.jolts]
+  | append ($m.buttons | each {
+    reduce -f $m.jolts {|bo a| update $bo (-1)}
+    | each {$in == -1 | into int}
+    })
+  | each {wrap x | transpose -i}
+  | flatten | transpose -i
+  | rename jolt
+  | rename -b {str replace column c}
+  | substract-rows $m.index
+  | where jolt != 0
+  | do { let r = $in
+    $m
+    | update jolts $r.jolt
+    | update buttons { $r
+      | reject jolt index | transpose -i
+      | each {values | enumerate | where item == 1 | $in.index}
+      | where $it != []
+    }
+  }
+}
+
 def rearrange-jolts-by-buttons-available [] {
   let m = $in # machine
-  let n = $m.buttons # new arrangement
-  | flatten | uniq -c
-  | insert jolts {|i| $m.jolts | get $i.value}
-  | sort-by count jolts
+  let n = $m.jolts # new arrangement
+  | enumerate
+  | each {|i|
+    let buttons_with_out = $m.buttons | where $it has $i.index
+    let lengths = $buttons_with_out | each {length}
+    $i | merge {min: ($lengths | math min) max: ($lengths | math max)
+      count: ($buttons_with_out | length | $in * -1)}
+  }
+  | sort-by min max count -r
   | enumerate | flatten
+  | rename index prev-index item $'min ($m.index)'
+  | tee {print}
   $m
-  | update jolts {$n.jolts}
+  | update jolts {$n.item}
   | update buttons {each {
-    each {|i| $n | where value == $i | $in.0.index}
+    each {|i| $n | where prev-index == $i | $in.0.index}
     | sort
   }}
 }
 
 def gold [] {
-  let cache = try {open res.nuon} | default []
+  let file = $'res-($in | length).nuon'
+  let cache = try {open $file | compact res} | default []
   $in | reject lights
   | enumerate | flatten
   | where index not-in $cache.index
   # | first $PROCESS_FIRST_N
   | update jolts {split row , | into int}
+  | each {rref $in}
   | each {rearrange-jolts-by-buttons-available}
   | update buttons {sort-buttons-and-insert-rem}
+  | tee {each {update buttons {$in.out} | rref $in}}
   | tee {each {inspect-machine}}
   | par-each -t 3 {min-button-count-for-jolts -o}
   | compact
