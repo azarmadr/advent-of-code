@@ -57,7 +57,6 @@ def inspect-machine [i=def] {
   | update buttons {each {update out {str join ' '}}
     | upsert rem {str join ' '}
   }
-  | enumerate | flatten | rename $i
   | table -e
   | print
   $in
@@ -65,9 +64,9 @@ def inspect-machine [i=def] {
 
 def inspect-res [name?] {
   if $name != null {print $name}
-  $'($in.best? | if $in != null {$"best: ($in) "})dur: ($in.dur) '
+  $'($in.dur) ($in.best? | if $in != null {$" best: ($in)"})'
   | print
-  $in | reject -o best dur | items {|k v| $v
+  $in | reject -o best dur now | items {|k v| $v
     | first 111
     | each {values | $'($in)' | str replace -a , ''}
     | $"($k)[($v | length)]\n($in| try {
@@ -76,7 +75,15 @@ def inspect-res [name?] {
     | str trim
     | print
   }
-  print '---'
+  print ''
+  $in
+}
+
+def inspect-button-counts [] {
+  update counts {str join ' '}
+  | update jolts {str join ' '}
+  | wrap name | grid
+  | print
   $in
 }
 
@@ -85,43 +92,59 @@ def pressable-for [jolts button] {
   | enumerate
   | where item == 0
   | get index
-  | all {$in not-in $button.item.out}
+  | all {$in not-in $button.out}
+}
+
+def skip-if-rem-cant-change [rem] {
+  if $rem == [] {return $in}
+  let i = $in
+  if ($rem | each {|i| $i.jolts | get $i} | all {$in == 0}) {$i}
+}
+def prune-duplicates [] {
+  group-by {$in.jolts | str join ,} --to-table
+  | get items
+  | each { if ($in | length) == 1 {} else {
+    group-by {$in.counts | math sum} --to-table
+    | rename sum | update sum {into int} | sort-by sum
+    | $in.0.items
+  }}
+  | flatten
 }
 
 def min-button-count-for-jolts [-o] {
   let m = $in # machine
-  let buttons = $m.buttons | enumerate
+  let buttons = $m.buttons | enumerate | flatten | rename index
   let counts = {counts: ($m.buttons | each {0})
-  jolts: $m.jolts}
-  let rems = $m.buttons.rem | flatten
-  let SIZE_LIMIT = 9 * ($rems | length)
-  0..999 | generate {|c i|
-    if $i.wip? == null {return {out: $i}}
-    let now = date now
-    let SIZE_LIMIT = $SIZE_LIMIT
-    | if $i.best? == null {} else {$in * 99999}
+  jolts: $m.jolts next-button-to-try: 0}
+  let SIZE_LIMIT = 111 * ($buttons | length)
+  let now = date now
+  0.. | generate {|c i|
+    # if $c > 999 {return {}}
+    if (
+      # $i.best? == null and $c > 499 or
+      $i.wip? == null) {
+      return {out: $i}}
     $i.wip
     | first $SIZE_LIMIT
     | par-each {|c| $buttons
-    | where (pressable-for $c.jolts $it)
-    | each {|b| $c
-      | update ([counts $b.index] | into cell-path) {
-	let count = $in
-	if $b.item.rem == [] {
-	  $count + 1
-	} else {
-	  let mult = $b.item.rem | each {|o| $c.jolts | get $o}
-	  | uniq | sort
-	  if $mult.0 == 0 {
-	    $count + 1 # don't want to return the same
-	  } else {
-	    $mult.0
-	  }
-	}
+    | where $c.next-button-to-try == $it.index
+    | each {|b| 
+      let mj = $b.out | each {|i| $c.jolts | get $i} | math min
+      let rem = $b.rem | each {|i| $c.jolts | get $i} | uniq
+      match $rem {
+	[] => 0..$mj
+	[$x] if $x <= $mj => $rem
+	_ => []
+      } | each {|p| # presses
+	$c
+	| update ([counts $b.index] | into cell-path) {$in + $p}
+	| update jolts {|i| get-jolts $i.counts $m}
+	| update next-button-to-try {$in + 1}
       }
-      | update jolts {|i| get-jolts $i.counts $m}
     }}
-    | flatten | uniq
+    | flatten | flatten
+    # | where next-button-to-try < ($buttons | length) or (
+    #   $it.jolts | all {$in == 0})
     | where (not $o 
       or $i.best? == null
       or ($it.counts | math sum) < $i.best)
@@ -132,13 +155,10 @@ def min-button-count-for-jolts [-o] {
     }}
     | upsert wip {
       append ($i.wip | skip $SIZE_LIMIT)
-      | sort-by {get jolts | where $it != 0 | length}
-      | group-by {$in.jolts | str join ,} --to-table
-      | get items | each { if ($in | length) == 1 {} else {
-	group-by {$in.counts | math sum} --to-table
-	| rename sum | update sum {into int} | sort-by sum
-	| $in.0.items
-      }} | flatten
+      # if ($in | is-empty) {} else {roll up}
+      #      | sort-by {$in.next-button-to-try * -1} {
+      # get jolts | where $it != 0 | length}
+      # prune-duplicates
     }
     | compact -e
     | insert best {
@@ -147,11 +167,20 @@ def min-button-count-for-jolts [-o] {
 	| where $i.best? == null or $it < $i.best
 	| if $in == [] {$i.best} else {math min}
     }}
-    | insert dur {$'[($c)] ((date now) - $now)'}
-    | if $c mod 27 == 0 {inspect-res} else {}
+    | insert now $i.now?
+    | if $c mod 88 == 87 or $in.res? != null {
+      upsert now (date now)
+      | insert dur {|p| $'[($m.index):($c)] ([$i.now? $now] | compact
+	| each {$p.now - $in | $in // 1sec * 1sec} | str join " | ")'}
+      | do {$in.wip?.next-button-to-try | default [] | uniq -c
+	| rename index $'c($m.index)' | sort-by index
+	| transpose -rd | [$in]
+	| print; $in}
+      | inspect-res
+    } else {}
     | {out: $i next:$in}
   } {wip:[$counts]}
-  | last | get best
+  | last | {index: $m.index res: $in.best?}
 }
 
 def get-jolts [counts machine] {
@@ -188,7 +217,6 @@ def rearrange-jolts-by-buttons-available [] {
   | insert jolts {|i| $m.jolts | get $i.value}
   | sort-by count jolts
   | enumerate | flatten
-print $n
   $m
   | update jolts {$n.jolts}
   | update buttons {each {
@@ -198,15 +226,19 @@ print $n
 }
 
 def gold [] {
-  reject lights
+  let cache = try {open res.nuon} | default []
+  $in | reject lights
   | update jolts {split row , | into int}
   | each {rearrange-jolts-by-buttons-available}
   | update buttons {sort-buttons-and-insert-rem }
-  | enumerate
-  | first 9
-  | par-each {update item {inspect-machine 'gold'
+  | enumerate | flatten
+  | where index not-in $cache.index
+  | first 27
+  | par-each -t 3 {inspect-machine $'gold'
     | min-button-count-for-jolts -o
-  }}
+  }
+  | compact
+  | tee {if $in != [] {append $cache | save -f res.nuon}}
   # math sum
 }
 
