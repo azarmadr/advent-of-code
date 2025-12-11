@@ -18,22 +18,116 @@ def combination-gen [] {
   | flatten
 }
 
-def silver [] {
-  update buttons {|i|
-    combination-gen
-    | where ($it | reduce -f $i.lights {|i a|
-      $i | reduce -f $a {|i a| 
-	$a | update $i {if $in == . {'#'} else {'.'}}
+def min-button-count [key final filter: closure cl: closure] {
+  let machine = $in
+  let start = $in | get $key
+  generate {|i|
+    if ($i | any {uniq | $in == [$final]}) {return {}}
+    $i
+    | par-each {|l| $machine.buttons | each {|b|
+      $b.out | reduce -f $l {|o|
+	update $o {do $cl $i}
       }
-    } | uniq) == [.]
-    | first
+    }}
+    | flatten
+    | uniq
+    | where (do $filter $it $start)
+    | do {
+      each {into int|str join ' '}| print $'($in | first 27 | grid -w 29)r: ($in | length)'
+      $in
+    }
+    | {out: $i next:$in}
+  } [$start]
+}
+
+def silver [] {
+  update lights {each {$in == .}}
+  | update buttons {sort | wrap out}
+  | each {
+    min-button-count lights true {|it start|
+      $it != $start
+    } {|_| not $in}
     | length
   }
-  | get buttons
   | math sum
 }
 
+def inspect-machine [i=def] {
+  update joltage {str join ' '}
+  | update buttons {each {update out {str join ' '}}
+    | upsert rem {str join ' '}
+  }
+  | enumerate | flatten | rename $i
+  | table -e
+  | print
+  $in
+}
+
+def min-button-count-for-joltage [] {
+  let machine = $in
+  let ids = $machine.buttons | get index
+  generate {|i|
+    if ($i.joltage | all {all {$in == 0}}) {return {}}
+    $ids | each {|id| $i | par-each {|m| 
+      let b = $m.buttons | get $id
+      let mult = if $b.rem == [] {
+	# if ($b.out | any {|o| ($m.joltage | get $o) < 1}) {
+	#  return $m
+	# }
+	$b.mult + 1
+      } else {
+	let mult = $b.rem | each {|o| $m.joltage | get $o}
+	| uniq
+	if ($mult | length) > 1 {
+	  $b.mult + 1
+	} else if $mult.0 == 0 {
+	  $b.mult + 1
+	} else {
+	  $m.joltage | get $b.rem.0
+	}
+      }
+      $m
+      | update ([buttons $id mult] | into cell-path) {
+	$in + $mult}
+      | update joltage {|j| $b.out
+	| reduce -f $j.joltage {|i j|
+	  $j | update $i {$in - $mult}
+      }}
+    }}
+    | flatten
+    | uniq
+    | where ($it.joltage | all {$in >= 0})
+    # inspect-machine 'updated'
+    | do {length | print; $in}
+    | {out: $i next:$in}
+  } [$machine]
+}
+
 def gold [] {
+  reject lights
+  | update joltage {split row , | into int}
+  | update buttons {
+    sort | wrap out | insert mult {0}
+    | move mult --first
+    | enumerate | flatten
+    | do {
+      let buttons = $in
+      | reverse
+      $in
+      | insert rem {|b|
+	$b.out | each {|b|
+	  $buttons | where $it.out has $b
+	  | first
+	  | {out: $b id: $in.index}
+	}
+	| where id == $b.index
+	| get out
+      }
+    }
+  }
+  | first
+  | inspect-machine 'gold'
+  | each {min-button-count-for-joltage | last}
 }
 
 def parse-input [input] {
