@@ -2,7 +2,35 @@ $env.config.table.mode = 'compact'
 $env.config.table.header_on_separator = true
 use .../nu/get-days-input.nu *
 
+def combination-gen [] {
+  let items = $in
+  1..($items | length)
+  | generate {|e i|
+    $i
+    | each {|j| $items
+      | where $it not-in $j
+      | each {[...$j $in] | sort}
+    }
+    | flatten
+    | uniq
+    | {out: $i, next: $in}
+  } ($items | each {[$in]})
+  | flatten
+}
+
 def silver [] {
+  update buttons {|i|
+    combination-gen
+    | where ($it | reduce -f $i.lights {|i a|
+      $i | reduce -f $a {|i a| 
+	$a | update $i {if $in == . {'#'} else {'.'}}
+      }
+    } | uniq) == [.]
+    | first
+    | length
+  }
+  | get buttons
+  | math sum
 }
 
 def gold [] {
@@ -24,7 +52,7 @@ def parse-input [input] {
   | rename lights buttons joltage
   | update buttons {
     split row ' '
-    | each {split row -r \D | compact -e}
+    | each {split row -r \D | compact -e | into int}
   }
   | update lights {
     split row '' | compact -e
@@ -33,11 +61,11 @@ def parse-input [input] {
 def run [input] {
   let input = parse-input $input
   {}
-  | insert gold {$input | gold}
+  # insert gold {$input | gold}
   | insert silver {$input | silver}
 }
 
-def main [i=1, -v] {
+def main [i=0, -v] {
   let input = [input.txt sample.txt] | get $i
   if $v {debug profile -l -m 3 { run $input}
     | move duration_ms --after line
